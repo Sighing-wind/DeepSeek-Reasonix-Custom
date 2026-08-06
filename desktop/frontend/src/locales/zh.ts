@@ -1299,6 +1299,12 @@ export const zh: Record<DictKey, string> = {
   "projectTree.timeFilter1d": "最近 1 天",
   "projectTree.emptyNoTimeFilterMatch": "没有话题符合时间筛选条件",
   "projectTree.clearTimeFilter": "清除筛选",
+  "projectTree.resetTopicOrder": "恢复自动排序",
+  "projectTree.mergeTitle": "合并对话",
+  "projectTree.mergeConfirm": "将 {source} 合并进 {target}?被拖动的对话内容将追加到主对话末尾。",
+  "projectTree.mergeAsTarget": "以目标为主",
+  "projectTree.mergeAsSource": "以被拖动对话为主",
+  "projectTree.mergeCancel": "取消",
 
   // 记忆抽屉
   "memory.title": "记忆",

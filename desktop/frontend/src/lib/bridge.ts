@@ -550,6 +550,8 @@ export interface AppBindings {
   RenameTopic(topicID: string, title: string): Promise<void>;
   DeleteTopic(topicID: string): Promise<void>;
   TrashTopic(topicID: string): Promise<void>;
+  MergeTopics(sourceTopicID: string, targetTopicID: string): Promise<void>;
+  MoveTopicToProject(topicID: string, targetWorkspaceRoot: string): Promise<void>;
   SetTopicPinned(topicID: string, pinned: boolean): Promise<void>;
   ContextPanel(tabID: string): Promise<ContextPanelInfo>;
   // New native-feel bindings (added with the desktop native-feel plan).
@@ -929,7 +931,7 @@ function bridgeBreadcrumb(method: string): string {
   if (/^(AddSkillPath|RemoveSkillPath|RefreshSkills|SetSkillEnabled|AcceptSkillSuggestion|AvailableSubagentTools|CreateSubagentProfile|UpdateSubagentProfile|DeleteSubagentProfile|SetSubagentProfileModel|SetSubagentProfileEffort|TrySubagentProfile|CancelTrySubagentProfile)/.test(method))
     return `skill ${method}`;
   if (/^(MinimiseMainWindow|ToggleMaximiseMainWindow|IsMainWindowMaximised|CloseMainWindow)$/.test(method)) return `window ${method}`;
-  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|EnsureBlankSurface|SetActiveTab|CloseTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
+  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|EnsureBlankSurface|SetActiveTab|CloseTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|MergeTopics|MoveTopicToProject|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
     return `nav ${method}`;
   return "";
 }
@@ -4990,6 +4992,28 @@ function makeMockApp(): AppBindings {
     },
     async TrashTopic(topicID: string) {
       deleteMockTopic(topicID);
+    },
+    async MergeTopics(sourceTopicID: string, _targetTopicID: string) {
+      deleteMockTopic(sourceTopicID);
+    },
+    async MoveTopicToProject(topicID: string, targetWorkspaceRoot: string) {
+      let moved: ProjectNode | null = null;
+      for (const parent of mockProjectTree) {
+        const children = projectChildren(parent);
+        const idx = children.findIndex((child) => child.topicId === topicID);
+        if (idx >= 0) {
+          moved = children[idx];
+          parent.children = children.filter((child) => child.topicId !== topicID);
+        }
+      }
+      if (!moved) return;
+      if (targetWorkspaceRoot === "") {
+        const global = mockProjectTree.find((node) => node.kind === "global_folder");
+        if (global) global.children = [...projectChildren(global), moved];
+      } else {
+        const project = mockProjectTree.find((node) => node.kind === "project" && node.root === targetWorkspaceRoot);
+        if (project) project.children = [...projectChildren(project), moved];
+      }
     },
     async SetTopicPinned(topicID: string, pinned: boolean) {
       setMockTopicPinned(topicID, pinned);

@@ -300,6 +300,14 @@ function topicActivityDateLabel(ms: number): string {
 }
 
 type ProjectDropPosition = "before" | "after";
+
+type MergeDraft = {
+  source: string;
+  sourceLabel: string;
+  target: string;
+  targetLabel: string;
+};
+
 type WorkbenchHeaderMenu = "more" | "add" | null;
 type WorkbenchOrganizeMode = "project" | "recent" | "time";
 type WorkbenchSortMode = "created" | "updated";
@@ -318,6 +326,8 @@ const GLOBAL_PROJECT_ORDER_KEY = "__global__";
 const WORKBENCH_ORGANIZE_KEY = "projectTree:workbenchOrganize";
 // Shared by classic and workbench; key string kept for existing saved choices.
 const WORKBENCH_SORT_KEY = "projectTree:workbenchSort";
+// Manual topic order per project folder (map: parent order key -> topic ids).
+const TOPIC_ORDER_KEY = "projectTree:topicOrder";
 const READ_ACTIVITY_KEY = "projectTree:readActivity";
 const READ_ACTIVITY_INIT_KEY = "projectTree:readActivityInitialized";
 
@@ -362,6 +372,31 @@ function loadWorkbenchSortMode(): WorkbenchSortMode {
     /* localStorage unavailable */
   }
   return "updated";
+}
+
+function loadTopicOrder(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(TOPIC_ORDER_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!Array.isArray(value)) continue;
+      const ids = value.filter((v): v is string => typeof v === "string");
+      if (ids.length > 0) out[key] = ids;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveTopicOrder(order: Record<string, string[]>) {
+  try {
+    localStorage.setItem(TOPIC_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    /* localStorage unavailable */
+  }
 }
 
 function projectOrderKey(node: ProjectNode): string {
@@ -431,6 +466,21 @@ function reorderedProjectRoots(nodes: ProjectNode[], draggedRoot: string, target
   return next;
 }
 
+// Reorder `ids` so `draggedId` lands before/after `targetId`. Unknown ids are
+// appended so newly created topics stay visible in the manual order.
+function reorderedTopicIds(ids: string[], draggedId: string, targetId: string, position: ProjectDropPosition): string[] {
+  if (draggedId === targetId) return ids;
+  const next = ids.filter((id) => id !== draggedId);
+  const targetIndex = next.indexOf(targetId);
+  if (targetIndex < 0) return next.length === ids.length ? ids : [...next, draggedId];
+  next.splice(position === "before" ? targetIndex : targetIndex + 1, 0, draggedId);
+  return next;
+}
+
+function topicIdsFromChildren(children: ProjectNode[]): string[] {
+  return children.filter(isTopicNode).map((node) => node.topicId ?? "").filter(Boolean);
+}
+
 function applyProjectOrder(nodes: ProjectNode[], roots: string[]): ProjectNode[] {
   const projectEntries = nodes
     .map((node): [string, ProjectNode] => [projectOrderKey(node), node])
@@ -454,7 +504,33 @@ function projectSortValue(node: ProjectNode, sortMode: WorkbenchSortMode): numbe
   }, 0);
 }
 
-function sortWorkbenchChildren(children: ProjectNode[], sortMode: WorkbenchSortMode): ProjectNode[] {
+function sortWorkbenchChildren(children: ProjectNode[], sortMode: WorkbenchSortMode, explicitOrder?: string[]): ProjectNode[] {
+  if (explicitOrder && explicitOrder.length > 0) {
+    const topics = children.filter(isTopicNode);
+    const byId = new Map(topics.map((node) => [node.topicId ?? "", node]));
+    const known = new Set(explicitOrder.filter((id) => byId.has(id)));
+    if (known.size > 0 && topics.length > 1) {
+      const ordered = explicitOrder.map((id) => byId.get(id)).filter((node): node is ProjectNode => Boolean(node));
+      const pinned = ordered.filter((node) => node.pinned);
+      const unpinned = ordered.filter((node) => !node.pinned);
+      const leftover = topics.filter((node) => !known.has(node.topicId ?? ""));
+      const leftoverPinned = leftover.filter((node) => node.pinned);
+      const leftoverUnpinned = leftover
+        .filter((node) => !node.pinned)
+        .sort((a, b) => topicSortValue(b, sortMode) - topicSortValue(a, sortMode));
+      const topicQueue = [...pinned, ...leftoverPinned, ...unpinned, ...leftoverUnpinned];
+      const output: ProjectNode[] = [];
+      for (const child of children) {
+        if (isTopicNode(child) && child.topicId && byId.has(child.topicId)) {
+          const next = topicQueue.shift();
+          if (next) output.push(next);
+        } else {
+          output.push(child);
+        }
+      }
+      return output;
+    }
+  }
   return [...children].sort((a, b) => {
     if (!isTopicNode(a) || !isTopicNode(b)) return 0;
     if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
@@ -462,10 +538,11 @@ function sortWorkbenchChildren(children: ProjectNode[], sortMode: WorkbenchSortM
   });
 }
 
-function arrangeWorkbenchTree(nodes: ProjectNode[], organizeMode: WorkbenchOrganizeMode, sortMode: WorkbenchSortMode): ProjectNode[] {
+function arrangeWorkbenchTree(nodes: ProjectNode[], organizeMode: WorkbenchOrganizeMode, sortMode: WorkbenchSortMode, explicitTopicOrder: Record<string, string[]> = {}): ProjectNode[] {
   const arranged = nodes.map((node) => {
     if (node.kind !== "project" && node.kind !== "global_folder") return node;
-    return { ...node, children: sortWorkbenchChildren(asArray(node.children), sortMode) };
+    const orderKey = projectOrderKey(node);
+    return { ...node, children: sortWorkbenchChildren(asArray(node.children), sortMode, orderKey ? explicitTopicOrder[orderKey] : undefined) };
   });
   if (organizeMode === "project") return arranged;
   const mode = organizeMode === "recent" ? "updated" : sortMode;
@@ -478,8 +555,8 @@ function arrangeWorkbenchTree(nodes: ProjectNode[], organizeMode: WorkbenchOrgan
 // Classic keeps the user's manual project order but sorts topics inside each
 // folder, so row order matches the activity time shown in the meta line
 // instead of the persisted insertion order.
-export function arrangeClassicProjectTree(nodes: ProjectNode[], sortMode: WorkbenchSortMode): ProjectNode[] {
-  return arrangeWorkbenchTree(nodes, "project", sortMode);
+export function arrangeClassicProjectTree(nodes: ProjectNode[], sortMode: WorkbenchSortMode, explicitTopicOrder: Record<string, string[]> = {}): ProjectNode[] {
+  return arrangeWorkbenchTree(nodes, "project", sortMode, explicitTopicOrder);
 }
 
 // Classic folders preview only the first few topics; the rest sit behind a
@@ -634,6 +711,10 @@ export function ProjectTree({
   const [confirmRemoveProject, setConfirmRemoveProject] = useState<string | null>(null);
   const [dragProjectRoot, setDragProjectRoot] = useState<string | null>(null);
   const [dropProject, setDropProject] = useState<{ root: string; position: ProjectDropPosition } | null>(null);
+  const [dragTopicId, setDragTopicId] = useState<string | null>(null);
+  const [dropTopic, setDropTopic] = useState<{ parent: string; topicId: string; position: ProjectDropPosition } | null>(null);
+  const [mergeDraft, setMergeDraft] = useState<MergeDraft | null>(null);
+  const [topicOrder, setTopicOrder] = useState<Record<string, string[]>>(loadTopicOrder);
   const [collapseSnapshot, setCollapseSnapshot] = useState<CollapseSnapshot | null>(null);
   const [platform, setPlatform] = useState("");
   const [workbenchHeaderMenu, setWorkbenchHeaderMenu] = useState<WorkbenchHeaderMenu>(null);
@@ -649,6 +730,7 @@ export function ProjectTree({
   const [showAllTopics, setShowAllTopics] = useState<Set<string>>(new Set());
   const [hoverCard, setHoverCard] = useState<{ key: string; card: ProjectTreeTopicHoverCard; left: number; top: number } | null>(null);
   const hoverCardTimerRef = useRef<number | null>(null);
+  const mergeTimerRef = useRef<number | null>(null);
   const creatingRef = useRef(false);
   const trashingRef = useRef(false);
   const clickTimerRef = useRef<ProjectTreePendingTopicOpen | null>(null);
@@ -1169,10 +1251,10 @@ export function ProjectTree({
     const filtered = tree
       .map(filterNode)
       .filter((node): node is ProjectNode => node !== null);
-    if (compactTopics) return arrangeWorkbenchTree(filtered, workbenchOrganizeMode, workbenchSortMode);
-    if (creationTopics) return arrangeWorkbenchTree(filtered, "project", "updated");
-    return arrangeClassicProjectTree(filtered, workbenchSortMode);
-  }, [compactTopics, creationTopics, query, tree, timeFilter, workbenchOrganizeMode, workbenchSortMode]);
+    if (compactTopics) return arrangeWorkbenchTree(filtered, workbenchOrganizeMode, workbenchSortMode, topicOrder);
+    if (creationTopics) return arrangeWorkbenchTree(filtered, "project", "updated", topicOrder);
+    return arrangeClassicProjectTree(filtered, workbenchSortMode, topicOrder);
+  }, [compactTopics, creationTopics, query, timeFilter, topicOrder, tree, workbenchOrganizeMode, workbenchSortMode]);
 
   const pinnedTreeSections = useMemo<PinnedTreeSections>(() => {
     if (creationTopics) return { pinned: [], projects: visibleTree };
@@ -1255,6 +1337,70 @@ export function ProjectTree({
     setDropProject(null);
   }, []);
 
+  const clearTopicDrag = useCallback(() => {
+    if (mergeTimerRef.current !== null) {
+      clearTimeout(mergeTimerRef.current);
+      mergeTimerRef.current = null;
+    }
+    setDragTopicId(null);
+    setDropTopic(null);
+  }, []);
+
+  const commitTopicReorder = useCallback((parentKey: string, draggedId: string, targetId: string, position: ProjectDropPosition) => {
+    const parentNode = tree.find((nodeItem) => projectOrderKey(nodeItem) === parentKey);
+    const baseIds = parentNode ? topicIdsFromChildren(asArray(parentNode.children)) : [];
+    const current = topicOrder[parentKey] ?? baseIds;
+    const next = reorderedTopicIds(current, draggedId, targetId, position);
+    if (next.join("\n") === current.join("\n")) return;
+    setTopicOrder((prev) => {
+      const updated = { ...prev, [parentKey]: next };
+      saveTopicOrder(updated);
+      return updated;
+    });
+  }, [topicOrder, tree]);
+
+  const resetTopicOrder = useCallback((parentKey: string) => {
+    setTopicOrder((prev) => {
+      if (!(parentKey in prev)) return prev;
+      const updated = { ...prev };
+      delete updated[parentKey];
+      saveTopicOrder(updated);
+      return updated;
+    });
+  }, []);
+
+  const topicLabelById = useCallback((id: string) => {
+    for (const node of tree) {
+      for (const child of asArray(node.children)) {
+        if (child.topicId === id) return (child.label || child.topicId || "Untitled").replace(/^●\s*/, "");
+      }
+    }
+    return id;
+  }, [tree]);
+
+  const commitMerge = useCallback(async (sourceId: string, targetId: string) => {
+    setMergeDraft(null);
+    try {
+      await app.MergeTopics(sourceId, targetId);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
+      await refresh();
+    }
+  }, [onTopicsChanged, refresh, showToast]);
+
+  const commitTopicMove = useCallback(async (topicIdToMove: string, targetRoot: string) => {
+    try {
+      await app.MoveTopicToProject(topicIdToMove, targetRoot);
+      await refresh();
+      await onTopicsChanged?.();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
+      await refresh();
+    }
+  }, [onTopicsChanged, refresh, showToast]);
+
   useEffect(() => {
     if (!dragProjectRoot) return;
     window.addEventListener("dragend", clearProjectDrag);
@@ -1266,6 +1412,18 @@ export function ProjectTree({
       window.removeEventListener("blur", clearProjectDrag);
     };
   }, [clearProjectDrag, dragProjectRoot]);
+
+  useEffect(() => {
+    if (!dragTopicId) return;
+    window.addEventListener("dragend", clearTopicDrag);
+    window.addEventListener("drop", clearTopicDrag);
+    window.addEventListener("blur", clearTopicDrag);
+    return () => {
+      window.removeEventListener("dragend", clearTopicDrag);
+      window.removeEventListener("drop", clearTopicDrag);
+      window.removeEventListener("blur", clearTopicDrag);
+    };
+  }, [clearTopicDrag, dragTopicId]);
 
   const activeAncestorKeys = useMemo(
     () => activeSessionAncestorKeys(tree, activeScope, activeWorkspaceRoot, activeTopicId, activeSessionPath),
@@ -1286,7 +1444,7 @@ export function ProjectTree({
     });
   }, [activeAncestorKeys, manuallyCollapsed]);
 
-  const renderNode = (node: ProjectNode | null | undefined, depth: number, section: "pinned" | "projects" = "projects", isVisible = true) => {
+  const renderNode = (node: ProjectNode | null | undefined, depth: number, section: "pinned" | "projects" = "projects", isVisible = true, parentOrderKey?: string) => {
     if (!node) return null;
     const key = projectNodeKey(node, depth);
     const children = asArray(node.children);
@@ -1370,6 +1528,17 @@ export function ProjectTree({
             else setConfirmAction({ topicId, action: "trash" });
           },
         },
+        ...(parentOrderKey && topicOrder[parentOrderKey]
+          ? [
+              { type: "separator" as const, key: "topic-order-separator" },
+              {
+                key: "reset-topic-order",
+                icon: <ListRestart size={13} />,
+                label: t("projectTree.resetTopicOrder"),
+                onSelect: () => resetTopicOrder(parentOrderKey),
+              },
+            ]
+          : []),
       ];
       if (!isSessionNode && editingTopic === topicId) {
         return (
@@ -1404,10 +1573,73 @@ export function ProjectTree({
           sessionPath: openRequest.sessionPath,
         });
       }
+      const topicDraggable = projectDragEnabled && section !== "pinned" && Boolean(topicId) && editingTopic !== topicId && Boolean(parentOrderKey) && !isSessionNode;
+      const topicParentKey = parentOrderKey ?? "";
+      const topicDropPosition = dropTopic !== null && dropTopic.parent === topicParentKey && dropTopic.topicId === topicId ? dropTopic.position : null;
+      const handleTopicDragStart = (event: ReactDragEvent<HTMLElement>) => {
+        if (!topicDraggable) return;
+        const target = event.target;
+        if (target instanceof Element && target.closest(".project-tree__action-slot,.project-tree__topic-action-slot")) {
+          event.preventDefault();
+          return;
+        }
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", topicId);
+        setDragTopicId(topicId);
+        setDropTopic(null);
+      };
+      const handleTopicDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+        if (!topicDraggable || !dragTopicId || dragTopicId === topicId) return;
+        if (dropTopic !== null && dropTopic.parent !== topicParentKey) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const rect = event.currentTarget.getBoundingClientRect();
+        const position: ProjectDropPosition = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+        setDropTopic((current) => (
+          current !== null && current.parent === topicParentKey && current.topicId === topicId && current.position === position
+            ? current
+            : { parent: topicParentKey, topicId, position }
+        ));
+        if (mergeTimerRef.current === null) {
+          const sourceId = dragTopicId;
+          mergeTimerRef.current = window.setTimeout(() => {
+            mergeTimerRef.current = null;
+            if (!sourceId || sourceId === topicId) return;
+            clearTopicDrag();
+            setMergeDraft({ source: sourceId, sourceLabel: topicLabelById(sourceId), target: topicId, targetLabel: label });
+          }, 700);
+        }
+      };
+      const handleTopicDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+        if (!topicDraggable) return;
+        if (mergeDraft) return; // 悬停合并弹窗已出现,本次松手不执行排序
+        if (mergeTimerRef.current !== null) {
+          clearTimeout(mergeTimerRef.current);
+          mergeTimerRef.current = null;
+        }
+        const draggedId = dragTopicId || event.dataTransfer.getData("text/plain");
+        const position = dropTopic !== null && dropTopic.parent === topicParentKey && dropTopic.topicId === topicId ? dropTopic.position : "after";
+        event.preventDefault();
+        clearTopicDrag();
+        if (draggedId && draggedId !== topicId && topicParentKey) commitTopicReorder(topicParentKey, draggedId, topicId, position);
+      };
       const row = (
         <div
-          className={`project-tree__topic${scopeClass}${isSessionNode ? " project-tree__topic--session" : ""}${active ? " project-tree__topic--active" : ""}${node.running ? " project-tree__topic--running" : ""}${status ? ` project-tree__topic--status-${status}` : ""}${unread ? " project-tree__topic--unread" : ""}${!isSessionNode && pinned ? " project-tree__topic--pinned" : ""}${topicMenuOpen ? " project-tree__topic--menu-open" : ""}${sideTimeVisible && (timeLabel || showStatusInSide || showWaitingPill) ? " project-tree__topic--with-side" : metaFull ? " project-tree__topic--has-meta" : ""}${imSource ? " project-tree__topic--im-source" : ""}${shortcutIndex > 0 ? " project-tree__topic--show-shortcut" : ""}`}
+          className={`project-tree__topic${scopeClass}${isSessionNode ? " project-tree__topic--session" : ""}${active ? " project-tree__topic--active" : ""}${node.running ? " project-tree__topic--running" : ""}${status ? ` project-tree__topic--status-${status}` : ""}${unread ? " project-tree__topic--unread" : ""}${!isSessionNode && pinned ? " project-tree__topic--pinned" : ""}${topicMenuOpen ? " project-tree__topic--menu-open" : ""}${sideTimeVisible && (timeLabel || showStatusInSide || showWaitingPill) ? " project-tree__topic--with-side" : metaFull ? " project-tree__topic--has-meta" : ""}${imSource ? " project-tree__topic--im-source" : ""}${shortcutIndex > 0 ? " project-tree__topic--show-shortcut" : ""}${topicDraggable ? " project-tree__topic--draggable" : ""}${dragTopicId === topicId ? " project-tree__topic--dragging" : ""}${topicDropPosition ? ` project-tree__topic--drop-${topicDropPosition}` : ""}`}
           style={accentStyle}
+          draggable={topicDraggable}
+          onDragStart={handleTopicDragStart}
+          onDragOver={handleTopicDragOver}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            if (mergeTimerRef.current !== null) {
+              clearTimeout(mergeTimerRef.current);
+              mergeTimerRef.current = null;
+            }
+            setDropTopic(null);
+          }}
+          onDrop={handleTopicDrop}
+          onDragEnd={clearTopicDrag}
           onContextMenu={isSessionNode ? undefined : openTopicMenu}
           onMouseEnter={classicTopics ? (event) => scheduleHoverCard(event.currentTarget, key, node) : undefined}
           onMouseLeave={classicTopics ? cancelHoverCard : undefined}
@@ -1608,6 +1840,13 @@ export function ProjectTree({
       setDropProject(null);
     };
     const handleProjectDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+      if (dragTopicId) {
+        // 拖动的是对话:目标是把该对话移入此项目
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDropProject((current) => (current?.root === projectDragKey ? current : { root: projectDragKey, position: "after" }));
+        return;
+      }
       if (!draggableProject || !dragProjectRoot || dragProjectRoot === projectDragKey) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
@@ -1619,6 +1858,14 @@ export function ProjectTree({
       });
     };
     const handleProjectDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+      if (dragTopicId) {
+        // 把对话移入该项目(空 root = 移到 Global)
+        event.preventDefault();
+        const dragged = dragTopicId;
+        clearTopicDrag();
+        if (dragged) void commitTopicMove(dragged, scope === "global" ? "" : projectRoot);
+        return;
+      }
       if (!draggableProject) return;
       const draggedRoot = dragProjectRoot || event.dataTransfer.getData("text/plain");
       const position = dropProject?.root === projectDragKey ? dropProject.position : "after";
@@ -1800,7 +2047,7 @@ export function ProjectTree({
       return (
         <div className={`project-tree__children${isExpanded ? " project-tree__children--expanded" : ""}`}>
           <div className="project-tree__children-inner">
-            {windowedChildren.map((child) => renderNode(child, depth + 1, section, isVisible && isExpanded))}
+            {windowedChildren.map((child) => renderNode(child, depth + 1, section, isVisible && isExpanded, projectDragKey))}
             {windowToggleVisible && (
               <button
                 type="button"
@@ -2379,6 +2626,46 @@ export function ProjectTree({
               <span>{hoverCard.card.projectLabel}</span>
             </div>
           )}
+        </div>,
+        document.body,
+      )}
+      {mergeDraft && createPortal(
+        <div className="project-tree-merge-overlay" onClick={() => setMergeDraft(null)}>
+          <div
+            className="project-tree-merge-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("projectTree.mergeTitle")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="project-tree-merge-title">{t("projectTree.mergeTitle")}</div>
+            <div className="project-tree-merge-message">
+              {t("projectTree.mergeConfirm", { source: mergeDraft.sourceLabel, target: mergeDraft.targetLabel })}
+            </div>
+            <div className="project-tree-merge-actions">
+              <button
+                type="button"
+                className="project-tree-merge-btn project-tree-merge-btn--primary"
+                onClick={() => void commitMerge(mergeDraft.source, mergeDraft.target)}
+              >
+                {t("projectTree.mergeAsTarget")}
+              </button>
+              <button
+                type="button"
+                className="project-tree-merge-btn"
+                onClick={() => void commitMerge(mergeDraft.target, mergeDraft.source)}
+              >
+                {t("projectTree.mergeAsSource")}
+              </button>
+              <button
+                type="button"
+                className="project-tree-merge-btn"
+                onClick={() => setMergeDraft(null)}
+              >
+                {t("projectTree.mergeCancel")}
+              </button>
+            </div>
+          </div>
         </div>,
         document.body,
       )}

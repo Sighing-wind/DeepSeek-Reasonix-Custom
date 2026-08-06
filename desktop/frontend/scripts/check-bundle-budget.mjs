@@ -55,7 +55,7 @@ for (const path of localeChunks) {
   // Task Monitor adds 37 user-facing labels to each on-demand locale, while
   // Extension UI adds its own status and action copy. Keep both dictionaries
   // within narrowly measured, explicit allowances.
-  const budget = name.startsWith("zh-TW-") ? 53.25 * 1024 : 52.5 * 1024;
+  const budget = name.startsWith("zh-TW-") ? 53.5 * 1024 : 53.0 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 

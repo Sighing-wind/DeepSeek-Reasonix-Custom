@@ -1298,6 +1298,12 @@ export const en = {
   "projectTree.timeFilter1d": "Last 24 hours",
   "projectTree.emptyNoTimeFilterMatch": "No topics match the time filter",
   "projectTree.clearTimeFilter": "Clear filter",
+  "projectTree.resetTopicOrder": "Restore automatic order",
+  "projectTree.mergeTitle": "Merge conversations",
+  "projectTree.mergeConfirm": "Merge {source} into {target}? The dragged conversation will be appended to the main conversation.",
+  "projectTree.mergeAsTarget": "Keep target as main",
+  "projectTree.mergeAsSource": "Keep dragged as main",
+  "projectTree.mergeCancel": "Cancel",
 
   // memory drawer
   "memory.title": "Memory",
