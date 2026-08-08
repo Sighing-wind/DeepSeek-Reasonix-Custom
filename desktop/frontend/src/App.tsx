@@ -12,6 +12,7 @@ import {
   Command,
   Copy as RestoreIcon,
   Download,
+  Maximize2,
   Minus,
   Search,
   Server,
@@ -1289,6 +1290,9 @@ export default function App() {
   const composerFileRefRefreshKey = `${dockRefreshKey}:${fileRefRefreshKey}`;
   const [projectRevision, setProjectRevision] = useState(0);
   const [activeTopicTurns, setActiveTopicTurns] = useState<number | undefined>(undefined);
+  const [aiTitleDialog, setAiTitleDialog] = useState<{ title: string; current: string; loading: boolean } | null>(null);
+  const [pureMode, setPureMode] = useState(false);
+  const pureModeSavedLayout = useRef<{ sidebar: boolean; dock: boolean } | null>(null);
   const [composerInsertRequestsByTab, setComposerInsertRequestsByTab] = useState<Record<string, ComposerInsertRequest>>({});
   const [selectedTextRequestsByTab, setSelectedTextRequestsByTab] = useState<Record<string, SelectedTextInsertRequest>>({});
   const selectedTextRequestIdRef = useRef(0);
@@ -3573,6 +3577,73 @@ export default function App() {
   }, [controllerReady, recoverDeliveryToTab, resumeControllerGoalForTab, state.meta?.goal, t]);
   commitThenSendRef.current = commitThenSend;
 
+  const handleSuggestTitle = useCallback(async () => {
+    if (!activeTab?.topicId) return;
+    if (aiTitleDialog) return; // already open / generating — avoid double clicks
+    setAiTitleDialog({ title: "", current: topicDisplayTitle(activeTab), loading: true });
+    try {
+      const candidate = await app.SuggestTopicTitle(activeTab.scope ?? "", activeTab.workspaceRoot ?? "", activeTab.topicId);
+      setAiTitleDialog((current) => (current && current.loading ? { ...current, title: candidate, loading: false } : current));
+    } catch (error) {
+      setAiTitleDialog(null);
+      showToast(error instanceof Error ? error.message : String(error), "error");
+    }
+  }, [activeTab, aiTitleDialog, showToast]);
+
+  const handleUndoLastOperation = useCallback(async () => {
+    try {
+      await app.UndoLastOperation();
+      setProjectRevision((v) => v + 1);
+      showToast(t("projectTree.undoDone"), "info");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
+    }
+  }, [showToast, t]);
+
+  const enterPureMode = useCallback(() => {
+    pureModeSavedLayout.current = { sidebar: sidebarCollapsed, dock: workspacePanelOpen };
+    setSidebarCollapsed(true);
+    setWorkspacePanelOpen(false);
+    setPureMode(true);
+    showToast(t("pureMode.enterHint"), "info");
+  }, [showToast, t, sidebarCollapsed, workspacePanelOpen, setSidebarCollapsed, setWorkspacePanelOpen]);
+
+  // Esc exits pure mode (the entry toast tells the user about it).
+  useEffect(() => {
+    if (!pureMode) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        const saved = pureModeSavedLayout.current;
+        if (saved) {
+          setSidebarCollapsed(saved.sidebar);
+          setWorkspacePanelOpen(saved.dock);
+          pureModeSavedLayout.current = null;
+        }
+        setPureMode(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pureMode, setSidebarCollapsed, setWorkspacePanelOpen]);
+
+  const handleApplyAiTitle = useCallback(async () => {
+    if (!activeTab?.topicId || !aiTitleDialog) return;
+    const title = aiTitleDialog.title.trim();
+    setAiTitleDialog(null);
+    if (!title) return;
+    try {
+      await app.ApplyTopicTitle(activeTab.scope ?? "", activeTab.workspaceRoot ?? "", activeTab.topicId, title);
+      setProjectRevision((v) => v + 1);
+      showToast(t("aiTitle.applied"), "info", {
+        actionLabel: t("projectTree.mergeUndo"),
+        durationMs: 8000,
+        onAction: () => void handleUndoLastOperation(),
+      });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
+    }
+  }, [activeTab, aiTitleDialog, showToast, t]);
+
   const handleMessageAction = useCallback((turn: number, scope: string) => {
     const sourceTabId = activeTabId;
     if (!sourceTabId || activeTab?.readOnly) return;
@@ -4343,6 +4414,7 @@ export default function App() {
         browserPreviewChrome ? "app--browser-preview" : "",
         sidebarWorkbench ? "app--workbench" : "",
         sidebarCreation ? "app--creation" : "",
+        pureMode ? "app--pure" : "",
         !sidebarWorkbench && !sidebarCreation ? "app--classic" : "",
       ].filter(Boolean).join(" ")}
     >
@@ -4722,6 +4794,16 @@ export default function App() {
             </div>
             <div className="topicbar__spacer" />
             <div className="topicbar__actions">
+              <Tooltip label={t("pureMode.buttonHint")}>
+                <button
+                  className="topicbar__action-btn topicbar__action-btn--icon topicbar__action-btn--utility"
+                  type="button"
+                  aria-label={t("pureMode.button")}
+                  onClick={enterPureMode}
+                >
+                  <Maximize2 size={14} />
+                </button>
+              </Tooltip>
               {sidebarCreation && !sidebarImDetailConnection && activeTab?.scope === "project" && (
                 <ExternalOpener tabId={activeTab.id} dismissSignal={transientOverlayDismissSignal} />
               )}
@@ -4956,6 +5038,7 @@ export default function App() {
                 liveStore={liveStore}
                 tabId={activeTabId}
                 footerHeight={footerHeight}
+                onSuggestTitle={handleSuggestTitle}
                 onPrompt={handleTranscriptPrompt}
                 onDeliveryContinue={() => void handleDeliveryContinue()}
                 onEditPrompt={handleEditPrompt}
@@ -5497,6 +5580,51 @@ export default function App() {
 
       <RemoteHostKeyDialog />
       <RemoteSecretDialog />
+
+      {aiTitleDialog && (
+        <div
+          className="modal-backdrop ai-title-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setAiTitleDialog(null);
+          }}
+        >
+          <div className="ai-title-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="ai-title-dialog__title">{t("aiTitle.dialogTitle")}</div>
+            {aiTitleDialog.current && (
+              <div className="ai-title-dialog__current">
+                {t("aiTitle.currentTitle")}: {aiTitleDialog.current}
+              </div>
+            )}
+            <input
+              className="ai-title-dialog__input"
+              value={aiTitleDialog.title}
+              maxLength={20}
+              autoFocus
+              disabled={aiTitleDialog.loading}
+              placeholder={aiTitleDialog.loading ? t("aiTitle.loading") : ""}
+              onChange={(event) => setAiTitleDialog((current) => (current ? { ...current, title: event.target.value } : current))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void handleApplyAiTitle();
+                if (event.key === "Escape") setAiTitleDialog(null);
+              }}
+            />
+            <div className="ai-title-dialog__actions">
+              <button type="button" className="ai-title-dialog__btn" onClick={() => setAiTitleDialog(null)}>
+                {t("aiTitle.cancel")}
+              </button>
+              <button
+                type="button"
+                className="ai-title-dialog__btn ai-title-dialog__btn--primary"
+                disabled={aiTitleDialog.loading || !aiTitleDialog.title.trim()}
+                onClick={() => void handleApplyAiTitle()}
+              >
+                {t("aiTitle.apply")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CommandPalette
         open={paletteOpen}

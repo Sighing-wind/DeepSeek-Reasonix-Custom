@@ -295,6 +295,7 @@ export function Transcript({
   onLoadOlderHistory,
   turnStartAt,
   invocationMetadata = {},
+  onSuggestTitle,
 }: {
   items: Item[];
   live?: LiveStream;
@@ -322,6 +323,8 @@ export function Transcript({
   onLoadOlderHistory?: () => void;
   turnStartAt?: number;
   invocationMetadata?: InvocationMetadataMap;
+  /** opens the AI title dialog for the active conversation (passed to TurnActions) */
+  onSuggestTitle?: () => void;
 }) {
   const t = useT();
   const subscribeLive = useCallback(
@@ -796,6 +799,7 @@ export function Transcript({
           rewindDisabled={rewindDisabled}
           hoverMenus={actionHoverMenus}
           isLastTurn={turn === lastTurn}
+          onAiTitle={onSuggestTitle}
           onRewind={(targetTurn, scope) => {
             onRewind?.(targetTurn, scope);
             setOpenAction(null);

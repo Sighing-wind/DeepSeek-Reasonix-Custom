@@ -6327,6 +6327,7 @@ type ProjectNode struct {
 	SessionPath      string        `json:"sessionPath,omitempty"`
 	ProjectColor     string        `json:"projectColor,omitempty"`
 	Turns            int           `json:"turns,omitempty"`
+	Preview          string        `json:"preview,omitempty"`
 	CreatedAt        int64         `json:"createdAt,omitempty"`
 	LastActivityAt   int64         `json:"lastActivityAt,omitempty"`
 	Open             bool          `json:"open,omitempty"`
@@ -7659,6 +7660,7 @@ func (a *App) topicTrashTargets(topicID string) ([]topicTrashTarget, error) {
 // topicSummary is used by ListProjectTree and mergeSessionInfos to track
 // per-topic turn count and last activity.
 type topicSummary struct {
+	preview              string
 	turns                int
 	adoptedRecoveryTurns int
 	lastActivityAt       int64
@@ -7679,6 +7681,7 @@ func (s topicSummary) displayTurns() int {
 type runtimeSessionStatus struct {
 	sessionPath      string
 	label            string
+	preview          string
 	titleSource      string
 	turns            int
 	createdAt        int64
@@ -7822,6 +7825,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 		runtimeSessionsByTopic[topicSummaryKey(tab.Scope, tab.WorkspaceRoot, tab.TopicID)] = append(runtimeSessionsByTopic[topicSummaryKey(tab.Scope, tab.WorkspaceRoot, tab.TopicID)], runtimeSessionStatus{
 			sessionPath:      sessionPath,
 			label:            label,
+			preview:          strings.TrimSpace(info.Preview),
 			titleSource:      titleSource,
 			turns:            info.Turns,
 			createdAt:        unixMilliOrZero(info.CreatedAt),
@@ -7881,6 +7885,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 				SessionPath:      session.sessionPath,
 				ProjectColor:     projectColor,
 				Turns:            session.turns,
+				Preview:          session.preview,
 				CreatedAt:        session.createdAt,
 				LastActivityAt:   session.lastActivityAt,
 				Open:             session.open,
@@ -7926,6 +7931,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 				TopicID:        id,
 				ProjectColor:   globalColor,
 				Turns:          summary.displayTurns(),
+				Preview:        summary.preview,
 				CreatedAt:      topicCreatedAtForTree(globalCreatedMap, id),
 				LastActivityAt: summary.lastActivityAt,
 				Open:           open,
@@ -8013,6 +8019,7 @@ func (a *App) ListProjectTree() []ProjectNode {
 				TopicID:        tid,
 				ProjectColor:   p.Color,
 				Turns:          summary.displayTurns(),
+				Preview:        summary.preview,
 				CreatedAt:      topicCreatedAtForTree(createdMap, tid),
 				LastActivityAt: summary.lastActivityAt,
 				Open:           open,
@@ -9286,6 +9293,7 @@ func mergeSessionInfos(dir string, infos []agent.SessionInfo, titles map[string]
 			}
 			if lastActivityAt > summary.lastActivityAt {
 				summary.lastActivityAt = lastActivityAt
+				summary.preview = strings.TrimSpace(info.Preview)
 			}
 			topicSummaries[key] = summary
 			continue
@@ -9294,6 +9302,7 @@ func mergeSessionInfos(dir string, infos []agent.SessionInfo, titles map[string]
 		summary.turns += info.Turns
 		if lastActivityAt > summary.lastActivityAt {
 			summary.lastActivityAt = lastActivityAt
+			summary.preview = strings.TrimSpace(info.Preview)
 		}
 		topicSummaries[key] = summary
 	}

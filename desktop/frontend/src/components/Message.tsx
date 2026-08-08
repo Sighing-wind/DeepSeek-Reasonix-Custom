@@ -1,6 +1,6 @@
 import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { BrainCircuit, ChevronDown, ChevronRight, FileText, Folder, GitBranch, Image, MessageSquare, Pencil, RotateCcw, ScrollText } from "lucide-react";
+import { BrainCircuit, ChevronDown, ChevronRight, FileText, Folder, GitBranch, Image, MessageSquare, Pencil, RotateCcw, ScrollText, Wand2 } from "lucide-react";
 import { Markdown } from "./Markdown";
 import { CopyButton } from "./CopyButton";
 import { ProcessBrainIcon } from "./ProcessCard";
@@ -635,6 +635,7 @@ export function TurnActions({
   rewindDisabled = false,
   hoverMenus = false,
   isLastTurn = false,
+  onAiTitle,
 }: {
   text: string;
   turn?: number;
@@ -647,6 +648,8 @@ export function TurnActions({
   hoverMenus?: boolean;
   /** true when this is the last user turn — disables "summarize after" */
   isLastTurn?: boolean;
+  /** opens the AI title dialog for the conversation (only rendered on the last turn) */
+  onAiTitle?: () => void;
 }) {
   const t = useT();
   const [confirmScope, setConfirmScope] = useState<MessageActionScope | null>(null);
@@ -792,6 +795,17 @@ export function TurnActions({
             <GitBranch size={13} />
             <span>{actionLabel("fork")}</span>
           </button>
+          {isLastTurn && onAiTitle && (
+            <button
+              className="turn-actions__btn"
+              type="button"
+              title={t("aiTitle.hint")}
+              onClick={onAiTitle}
+            >
+              <Wand2 size={13} />
+              <span>{t("aiTitle.button")}</span>
+            </button>
+          )}
           <div
             className={`turn-actions__group${openMenu === "summary" ? " turn-actions__group--open" : ""}`}
             onMouseEnter={() => openHoverMenu("summary")}

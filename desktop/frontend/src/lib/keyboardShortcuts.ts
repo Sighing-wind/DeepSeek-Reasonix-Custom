@@ -10,6 +10,7 @@ export type ShortcutAction =
   | "composer.redo"
   | "composer.send"
   | "composer.undo"
+  | "custom.undoLastOperation"
   | "selection.addToChat"
   | "settings.open"
   | "tab.close"
@@ -124,6 +125,14 @@ export const SHORTCUT_DEFINITIONS: readonly ShortcutDefinition[] = [
     defaults: modCombo("z"),
     allowInEditable: true,
     configurable: false,
+  },
+  {
+    action: "custom.undoLastOperation",
+    section: "session",
+    labelKey: "shortcuts.action.undoLastOperation",
+    descriptionKey: "shortcuts.desc.undoLastOperation",
+    defaults: modCombo("z"),
+    preventDefault: true,
   },
   {
     action: "composer.redo",

@@ -143,7 +143,7 @@ export function projectTreeTopicMetaLine(node: ProjectNode, t: Translator, compa
 // Model for the classic hover preview card: the row keeps a time-only meta
 // line, so the card carries the full title, turns, exact date, and project.
 export type ProjectTreeTopicHoverCard = {
-  title: string;
+  preview: string;
   statusLabel: string;
   metaLine: string;
   exactTime: string;
@@ -161,7 +161,7 @@ export function projectTreeTopicHoverCardModel(node: ProjectNode, t: Translator,
   const metaLine = projectTreeTopicMetaLine(node, t);
   const exactTime = activityAt ? topicActivityDateLabel(activityAt) : "";
   return {
-    title: (node.label || node.topicId || "Untitled").replace(/^●\s*/, ""),
+    preview: (node.preview || "").trim(),
     statusLabel: topicStatusLabel(node, t),
     metaLine,
     exactTime: projectTreeDedupedExactTime(metaLine, exactTime),
@@ -301,11 +301,11 @@ function topicActivityDateLabel(ms: number): string {
 
 type ProjectDropPosition = "before" | "after";
 
-type MergeDraft = {
+type MergePick = {
   source: string;
-  sourceLabel: string;
   target: string;
-  targetLabel: string;
+  sourceParentKey: string | null;
+  targetParentKey: string | null;
 };
 
 type WorkbenchHeaderMenu = "more" | "add" | null;
@@ -712,8 +712,11 @@ export function ProjectTree({
   const [dragProjectRoot, setDragProjectRoot] = useState<string | null>(null);
   const [dropProject, setDropProject] = useState<{ root: string; position: ProjectDropPosition } | null>(null);
   const [dragTopicId, setDragTopicId] = useState<string | null>(null);
+  const [dragTopicParentKey, setDragTopicParentKey] = useState<string | null>(null);
   const [dropTopic, setDropTopic] = useState<{ parent: string; topicId: string; position: ProjectDropPosition } | null>(null);
-  const [mergeDraft, setMergeDraft] = useState<MergeDraft | null>(null);
+  const [mergePick, setMergePick] = useState<MergePick | null>(null);
+  const [mergePicker, setMergePicker] = useState<{ source: string; sourceLabel: string } | null>(null);
+  const [mergeSearch, setMergeSearch] = useState("");
   const [topicOrder, setTopicOrder] = useState<Record<string, string[]>>(loadTopicOrder);
   const [collapseSnapshot, setCollapseSnapshot] = useState<CollapseSnapshot | null>(null);
   const [platform, setPlatform] = useState("");
@@ -731,6 +734,7 @@ export function ProjectTree({
   const [hoverCard, setHoverCard] = useState<{ key: string; card: ProjectTreeTopicHoverCard; left: number; top: number } | null>(null);
   const hoverCardTimerRef = useRef<number | null>(null);
   const mergeTimerRef = useRef<number | null>(null);
+  const lastUserPreviewCacheRef = useRef(new Map<string, string>());
   const creatingRef = useRef(false);
   const trashingRef = useRef(false);
   const clickTimerRef = useRef<ProjectTreePendingTopicOpen | null>(null);
@@ -1285,12 +1289,29 @@ export function ProjectTree({
       const projectLabel = globalScope
         ? projectLabelByRoot.get(GLOBAL_PROJECT_ORDER_KEY) ?? "Global"
         : projectLabelByRoot.get(node.root ?? "") ?? "";
+      const card = projectTreeTopicHoverCardModel(node, t, projectLabel);
+      card.preview = ""; // the official node.preview is the FIRST user message; load the last one async instead
       setHoverCard({
         key: rowKey,
-        card: projectTreeTopicHoverCardModel(node, t, projectLabel),
+        card,
         left: rect.right + 10,
         top: Math.max(8, Math.min(rect.top, window.innerHeight - 150)),
       });
+      const topicId = node.topicId;
+      if (topicId) {
+        const cached = lastUserPreviewCacheRef.current.get(topicId);
+        if (cached !== undefined) {
+          setHoverCard((cur) => (cur && cur.key === rowKey ? { ...cur, card: { ...cur.card, preview: cached } } : cur));
+        } else {
+          void app
+            .GetLastUserPreview(globalScope ? "global" : "project", globalScope ? "" : (node.root ?? ""), topicId)
+            .then((text) => {
+              lastUserPreviewCacheRef.current.set(topicId, text);
+              setHoverCard((cur) => (cur && cur.key === rowKey ? { ...cur, card: { ...cur.card, preview: text } } : cur));
+            })
+            .catch(() => {});
+        }
+      }
     }, 350);
   }, [menuTopic, menuProject, editingTopic, editingProject, dragProjectRoot, projectLabelByRoot, t]);
 
@@ -1343,7 +1364,12 @@ export function ProjectTree({
       mergeTimerRef.current = null;
     }
     setDragTopicId(null);
+    setDragTopicParentKey(null);
     setDropTopic(null);
+    // A topic drag may have armed the project-folder drop indicator
+    // (dropProject) while hovering a folder row; clear it too so the orange
+    // highlight cannot linger after the drag ends.
+    setDropProject(null);
   }, []);
 
   const commitTopicReorder = useCallback((parentKey: string, draggedId: string, targetId: string, position: ProjectDropPosition) => {
@@ -1369,37 +1395,85 @@ export function ProjectTree({
     });
   }, []);
 
-  const topicLabelById = useCallback((id: string) => {
-    for (const node of tree) {
-      for (const child of asArray(node.children)) {
-        if (child.topicId === id) return (child.label || child.topicId || "Untitled").replace(/^●\s*/, "");
-      }
+  const undoMerge = useCallback(async () => {
+    try {
+      await app.UndoLastOperation();
+      await refresh();
+      await onTopicsChanged?.();
+      showToast(t("projectTree.undoDone"), "info");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error), "error");
     }
-    return id;
-  }, [tree]);
+  }, [onTopicsChanged, refresh, showToast, t]);
 
   const commitMerge = useCallback(async (sourceId: string, targetId: string) => {
-    setMergeDraft(null);
+    setMergePick(null);
     try {
       await app.MergeTopics(sourceId, targetId);
       await refresh();
       await onTopicsChanged?.();
+      showToast(t("projectTree.mergeDone"), "info", {
+        actionLabel: t("projectTree.mergeUndo"),
+        durationMs: 8000,
+        onAction: () => void undoMerge(),
+      });
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), "error");
       await refresh();
     }
-  }, [onTopicsChanged, refresh, showToast]);
+  }, [onTopicsChanged, refresh, showToast, t, undoMerge]);
+
+  // Merge-candidate highlight expires after 5s; double-clicking one of the
+  // highlighted rows commits the merge (that row becomes the primary).
+  useEffect(() => {
+    if (!mergePick) return;
+    const timer = window.setTimeout(() => setMergePick(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [mergePick]);
+
+  // Ctrl+Z (outside text inputs) reverts the most recent operation; Escape
+  // cancels an armed merge-candidate highlight.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMergePick(null);
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key.toLowerCase() !== "z") return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      event.preventDefault();
+      void undoMerge();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undoMerge]);
+
+  const mergeTargetCandidates = useMemo(() => {
+    if (!mergePicker) return [];
+    const out: { topicId: string; label: string; scopeLabel: string }[] = [];
+    for (const node of tree) {
+      const scopeLabel = node.kind === "global_folder" ? (node.label || "Global") : (node.label || "Project");
+      for (const child of asArray(node.children)) {
+        if (!isTopicNode(child) || !child.topicId || child.topicId === mergePicker.source) continue;
+        out.push({ topicId: child.topicId, label: (child.label || child.topicId || "Untitled").replace(/^●\s*/, ""), scopeLabel });
+      }
+    }
+    return out;
+  }, [mergePicker, tree]);
 
   const commitTopicMove = useCallback(async (topicIdToMove: string, targetRoot: string) => {
     try {
       await app.MoveTopicToProject(topicIdToMove, targetRoot);
+      showToast(t("projectTree.moveTopicDone"));
       await refresh();
       await onTopicsChanged?.();
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), "error");
       await refresh();
     }
-  }, [onTopicsChanged, refresh, showToast]);
+  }, [onTopicsChanged, refresh, showToast, t]);
 
   useEffect(() => {
     if (!dragProjectRoot) return;
@@ -1539,6 +1613,20 @@ export function ProjectTree({
               },
             ]
           : []),
+        ...(parentOrderKey && !isSessionNode
+          ? [
+              {
+                key: "merge-into",
+                icon: <GitBranch size={13} />,
+                label: t("projectTree.mergeInto"),
+                onSelect: () => {
+                  setMergePicker({ source: topicId, sourceLabel: label });
+                  setMergeSearch("");
+                  closeMenu();
+                },
+              },
+            ]
+          : []),
       ];
       if (!isSessionNode && editingTopic === topicId) {
         return (
@@ -1586,36 +1674,52 @@ export function ProjectTree({
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/plain", topicId);
         setDragTopicId(topicId);
+        setDragTopicParentKey(topicParentKey || null);
         setDropTopic(null);
+        // Starting another drag cancels any armed merge-candidate pair.
+        setMergePick(null);
       };
       const handleTopicDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
         if (!topicDraggable || !dragTopicId || dragTopicId === topicId) return;
-        if (dropTopic !== null && dropTopic.parent !== topicParentKey) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-        const rect = event.currentTarget.getBoundingClientRect();
-        const position: ProjectDropPosition = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
-        setDropTopic((current) => (
-          current !== null && current.parent === topicParentKey && current.topicId === topicId && current.position === position
-            ? current
-            : { parent: topicParentKey, topicId, position }
-        ));
+        // Ordering drops stay inside the same workspace; hovering a conversation
+        // of ANOTHER workspace arms only the merge (no reorder indicator).
+        const crossWorkspace = dragTopicParentKey !== null && dragTopicParentKey !== topicParentKey;
+        if (!crossWorkspace) {
+          if (dropTopic !== null && dropTopic.parent !== topicParentKey) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          const rect = event.currentTarget.getBoundingClientRect();
+          const position: ProjectDropPosition = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+          setDropTopic((current) => (
+            current !== null && current.parent === topicParentKey && current.topicId === topicId && current.position === position
+              ? current
+              : { parent: topicParentKey, topicId, position }
+          ));
+        }
+        // Hover-to-merge: hold a conversation over another conversation for
+        // ~700ms to arm the two merge candidates (cross-workspace included).
         if (mergeTimerRef.current === null) {
           const sourceId = dragTopicId;
           mergeTimerRef.current = window.setTimeout(() => {
             mergeTimerRef.current = null;
             if (!sourceId || sourceId === topicId) return;
             clearTopicDrag();
-            setMergeDraft({ source: sourceId, sourceLabel: topicLabelById(sourceId), target: topicId, targetLabel: label });
+            setMergePick({ source: sourceId, target: topicId, sourceParentKey: dragTopicParentKey, targetParentKey: topicParentKey });
           }, 700);
         }
       };
       const handleTopicDrop = (event: ReactDragEvent<HTMLDivElement>) => {
         if (!topicDraggable) return;
-        if (mergeDraft) return; // 悬停合并弹窗已出现,本次松手不执行排序
+        if (mergePick) return; // 合并候选已高亮,本次松手不执行排序
         if (mergeTimerRef.current !== null) {
           clearTimeout(mergeTimerRef.current);
           mergeTimerRef.current = null;
+        }
+        // Cross-workspace drop is inert.
+        if (dragTopicParentKey !== null && dragTopicParentKey !== topicParentKey) {
+          event.preventDefault();
+          clearTopicDrag();
+          return;
         }
         const draggedId = dragTopicId || event.dataTransfer.getData("text/plain");
         const position = dropTopic !== null && dropTopic.parent === topicParentKey && dropTopic.topicId === topicId ? dropTopic.position : "after";
@@ -1625,7 +1729,7 @@ export function ProjectTree({
       };
       const row = (
         <div
-          className={`project-tree__topic${scopeClass}${isSessionNode ? " project-tree__topic--session" : ""}${active ? " project-tree__topic--active" : ""}${node.running ? " project-tree__topic--running" : ""}${status ? ` project-tree__topic--status-${status}` : ""}${unread ? " project-tree__topic--unread" : ""}${!isSessionNode && pinned ? " project-tree__topic--pinned" : ""}${topicMenuOpen ? " project-tree__topic--menu-open" : ""}${sideTimeVisible && (timeLabel || showStatusInSide || showWaitingPill) ? " project-tree__topic--with-side" : metaFull ? " project-tree__topic--has-meta" : ""}${imSource ? " project-tree__topic--im-source" : ""}${shortcutIndex > 0 ? " project-tree__topic--show-shortcut" : ""}${topicDraggable ? " project-tree__topic--draggable" : ""}${dragTopicId === topicId ? " project-tree__topic--dragging" : ""}${topicDropPosition ? ` project-tree__topic--drop-${topicDropPosition}` : ""}`}
+          className={`project-tree__topic${scopeClass}${isSessionNode ? " project-tree__topic--session" : ""}${active ? " project-tree__topic--active" : ""}${node.running ? " project-tree__topic--running" : ""}${status ? ` project-tree__topic--status-${status}` : ""}${unread ? " project-tree__topic--unread" : ""}${!isSessionNode && pinned ? " project-tree__topic--pinned" : ""}${topicMenuOpen ? " project-tree__topic--menu-open" : ""}${sideTimeVisible && (timeLabel || showStatusInSide || showWaitingPill) ? " project-tree__topic--with-side" : metaFull ? " project-tree__topic--has-meta" : ""}${imSource ? " project-tree__topic--im-source" : ""}${shortcutIndex > 0 ? " project-tree__topic--show-shortcut" : ""}${topicDraggable ? " project-tree__topic--draggable" : ""}${dragTopicId === topicId ? " project-tree__topic--dragging" : ""}${topicDropPosition ? ` project-tree__topic--drop-${topicDropPosition}` : ""}${mergePick && (topicId === mergePick.source || topicId === mergePick.target) ? " project-tree__topic--merge-candidate" : ""}`}
           style={accentStyle}
           draggable={topicDraggable}
           onDragStart={handleTopicDragStart}
@@ -1641,15 +1745,20 @@ export function ProjectTree({
           onDrop={handleTopicDrop}
           onDragEnd={clearTopicDrag}
           onContextMenu={isSessionNode ? undefined : openTopicMenu}
-          onMouseEnter={classicTopics ? (event) => scheduleHoverCard(event.currentTarget, key, node) : undefined}
-          onMouseLeave={classicTopics ? cancelHoverCard : undefined}
-          onMouseDown={classicTopics ? cancelHoverCard : undefined}
+          onMouseEnter={(event) => scheduleHoverCard(event.currentTarget, key, node)}
+          onMouseLeave={cancelHoverCard}
+          onMouseDown={cancelHoverCard}
+          onDoubleClick={() => {
+            if (!mergePick) return;
+            if (topicId === mergePick.source) void commitMerge(mergePick.target, topicId);
+            else if (topicId === mergePick.target) void commitMerge(mergePick.source, topicId);
+          }}
         >
           <button
             type="button"
             className="project-tree__topic-main"
-            title={classicTopics ? undefined : title}
-            aria-label={classicTopics ? title : undefined}
+            title={undefined}
+            aria-label={title}
             style={{ paddingLeft: 14 + depth * 16 }}
             onClick={() => {
               if (!openRequest) return;
@@ -1678,6 +1787,13 @@ export function ProjectTree({
               if (clickTimerRef.current !== null && clickTimerRef.current.rowKey === key) {
                 clearTimeout(clickTimerRef.current.timer);
                 clickTimerRef.current = null;
+              }
+              // While merge candidates are armed, double-click picks the
+              // primary conversation instead of renaming.
+              if (mergePick && (topicId === mergePick.source || topicId === mergePick.target)) {
+                if (topicId === mergePick.source) void commitMerge(mergePick.target, topicId);
+                else if (topicId === mergePick.target) void commitMerge(mergePick.source, topicId);
+                return;
               }
               startRenameTopic(node, label);
             }}
@@ -2613,13 +2729,19 @@ export function ProjectTree({
           style={{ left: hoverCard.left, top: hoverCard.top }}
           aria-hidden="true"
         >
-          <div className="project-tree__hover-card-title">{hoverCard.card.title}</div>
-          {hoverCard.card.statusLabel && (
-            <div className="project-tree__hover-card-status">{hoverCard.card.statusLabel}</div>
+          {hoverCard.card.preview && (
+            <div className="project-tree__hover-card-preview">{hoverCard.card.preview}</div>
           )}
-          <div className="project-tree__hover-card-meta">
-            {[hoverCard.card.metaLine, hoverCard.card.exactTime].filter(Boolean).join(" · ")}
-          </div>
+          {(hoverCard.card.statusLabel || hoverCard.card.metaLine || hoverCard.card.exactTime) && (
+            <div className="project-tree__hover-card-meta">
+              {hoverCard.card.statusLabel && (
+                <span className="project-tree__hover-card-status">{hoverCard.card.statusLabel}</span>
+              )}
+              <span className="project-tree__hover-card-time">
+                {[hoverCard.card.metaLine, hoverCard.card.exactTime].filter(Boolean).join(" · ")}
+              </span>
+            </div>
+          )}
           {hoverCard.card.projectLabel && (
             <div className="project-tree__hover-card-project">
               <Folder size={12} aria-hidden="true" />
@@ -2629,39 +2751,51 @@ export function ProjectTree({
         </div>,
         document.body,
       )}
-      {mergeDraft && createPortal(
-        <div className="project-tree-merge-overlay" onClick={() => setMergeDraft(null)}>
+      {mergePicker && createPortal(
+        <div className="project-tree-merge-overlay" onClick={() => setMergePicker(null)}>
           <div
             className="project-tree-merge-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label={t("projectTree.mergeTitle")}
+            aria-label={t("projectTree.mergePickTarget")}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="project-tree-merge-title">{t("projectTree.mergeTitle")}</div>
+            <div className="project-tree-merge-title">{t("projectTree.mergePickTarget")}</div>
             <div className="project-tree-merge-message">
-              {t("projectTree.mergeConfirm", { source: mergeDraft.sourceLabel, target: mergeDraft.targetLabel })}
+              {t("projectTree.mergePickTargetHint", { source: mergePicker.sourceLabel })}
+            </div>
+            <input
+              className="project-tree-merge-search"
+              value={mergeSearch}
+              placeholder={t("projectTree.mergeSearchPlaceholder")}
+              onChange={(event) => setMergeSearch(event.target.value)}
+            />
+            <div className="project-tree-merge-targets">
+              {mergeTargetCandidates
+                .filter((candidate) => !mergeSearch || candidate.label.toLowerCase().includes(mergeSearch.toLowerCase()))
+                .map((candidate) => (
+                <button
+                  key={candidate.topicId}
+                  type="button"
+                  className="project-tree-merge-target"
+                  onClick={() => {
+                    const source = mergePicker.source;
+                    setMergePicker(null);
+                    // Right-click flow: picking a target merges the source
+                    // conversation INTO the chosen target (target stays).
+                    void commitMerge(source, candidate.topicId);
+                  }}
+                >
+                  <span className="project-tree-merge-target-label">{candidate.label}</span>
+                  <span className="project-tree-merge-target-scope">{candidate.scopeLabel}</span>
+                </button>
+              ))}
+              {mergeTargetCandidates.length === 0 && (
+                <div className="project-tree-merge-empty">{t("projectTree.mergeNoTargets")}</div>
+              )}
             </div>
             <div className="project-tree-merge-actions">
-              <button
-                type="button"
-                className="project-tree-merge-btn project-tree-merge-btn--primary"
-                onClick={() => void commitMerge(mergeDraft.source, mergeDraft.target)}
-              >
-                {t("projectTree.mergeAsTarget")}
-              </button>
-              <button
-                type="button"
-                className="project-tree-merge-btn"
-                onClick={() => void commitMerge(mergeDraft.target, mergeDraft.source)}
-              >
-                {t("projectTree.mergeAsSource")}
-              </button>
-              <button
-                type="button"
-                className="project-tree-merge-btn"
-                onClick={() => setMergeDraft(null)}
-              >
+              <button type="button" className="project-tree-merge-btn" onClick={() => setMergePicker(null)}>
                 {t("projectTree.mergeCancel")}
               </button>
             </div>

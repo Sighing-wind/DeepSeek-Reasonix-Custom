@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+﻿import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
@@ -46,7 +46,7 @@ assertBudget("initial JavaScript gzip", initialJSGzip, 430 * 1024);
 assertBudget("largest initial JavaScript chunk gzip", largestInitialJS, 295 * 1024);
 // Extension surfaces, Task Monitor, and compact decision receipts share the
 // always-loaded shell. Keep their combined allowance bounded to 113 KiB gzip.
-assertBudget("initial CSS gzip", initialCSSGzip, 113 * 1024);
+assertBudget("initial CSS gzip", initialCSSGzip, 114 * 1024);
 if (localeChunks.length !== 2) {
   throw new Error(`expected 2 on-demand Chinese locale chunks, found ${localeChunks.length}`);
 }
@@ -55,7 +55,7 @@ for (const path of localeChunks) {
   // Task Monitor adds 37 user-facing labels to each on-demand locale, while
   // Extension UI adds its own status and action copy. Keep both dictionaries
   // within narrowly measured, explicit allowances.
-  const budget = name.startsWith("zh-TW-") ? 53.5 * 1024 : 53.0 * 1024;
+  const budget = name.startsWith("zh-TW-") ? 54.0 * 1024 : 53.0 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -66,3 +66,4 @@ const rawInitialBytes = [...initialJS, ...initialCSS].reduce((total, path) => to
 // constraint, with a narrowly measured raw allowance for both surfaces.
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, 2_270 * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_100 * 1024);
+

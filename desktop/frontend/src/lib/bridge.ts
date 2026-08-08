@@ -552,6 +552,10 @@ export interface AppBindings {
   TrashTopic(topicID: string): Promise<void>;
   MergeTopics(sourceTopicID: string, targetTopicID: string): Promise<void>;
   MoveTopicToProject(topicID: string, targetWorkspaceRoot: string): Promise<void>;
+  GetLastUserPreview(scope: string, workspaceRoot: string, topicID: string): Promise<string>;
+  UndoLastOperation(): Promise<void>;
+  SuggestTopicTitle(scope: string, workspaceRoot: string, topicID: string): Promise<string>;
+  ApplyTopicTitle(scope: string, workspaceRoot: string, topicID: string, title: string): Promise<void>;
   SetTopicPinned(topicID: string, pinned: boolean): Promise<void>;
   ContextPanel(tabID: string): Promise<ContextPanelInfo>;
   // New native-feel bindings (added with the desktop native-feel plan).
@@ -931,7 +935,7 @@ function bridgeBreadcrumb(method: string): string {
   if (/^(AddSkillPath|RemoveSkillPath|RefreshSkills|SetSkillEnabled|AcceptSkillSuggestion|AvailableSubagentTools|CreateSubagentProfile|UpdateSubagentProfile|DeleteSubagentProfile|SetSubagentProfileModel|SetSubagentProfileEffort|TrySubagentProfile|CancelTrySubagentProfile)/.test(method))
     return `skill ${method}`;
   if (/^(MinimiseMainWindow|ToggleMaximiseMainWindow|IsMainWindowMaximised|CloseMainWindow)$/.test(method)) return `window ${method}`;
-  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|EnsureBlankSurface|SetActiveTab|CloseTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|MergeTopics|MoveTopicToProject|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
+  if (/^(OpenProjectTab|OpenGlobalTab|OpenTopicSession|EnsureBlankTab|ActivateTopic|EnsureBlankSurface|SetActiveTab|CloseTab|ReorderTabs|CreateTopic|RenameTopic|DeleteTopic|TrashTopic|MergeTopics|MoveTopicToProject|UndoLastOperation|SuggestTopicTitle|ApplyTopicTitle|RenameProject|RemoveWorkspace|SwitchWorkspace|PickWorkspace|DeliveryWorktreeAvailability|CreateDeliveryWorktree)/.test(method))
     return `nav ${method}`;
   return "";
 }
@@ -5014,6 +5018,18 @@ function makeMockApp(): AppBindings {
         const project = mockProjectTree.find((node) => node.kind === "project" && node.root === targetWorkspaceRoot);
         if (project) project.children = [...projectChildren(project), moved];
       }
+    },
+    async GetLastUserPreview(_scope: string, _workspaceRoot: string, _topicID: string) {
+      return "";
+    },
+    async UndoLastOperation() {
+      // no-op in browser dev — there is no backend snapshot to revert
+    },
+    async SuggestTopicTitle(_scope: string, _workspaceRoot: string, _topicID: string) {
+      return "AI 生成的标题";
+    },
+    async ApplyTopicTitle(_scope: string, _workspaceRoot: string, _topicID: string, _title: string) {
+      // no-op in browser dev
     },
     async SetTopicPinned(topicID: string, pinned: boolean) {
       setMockTopicPinned(topicID, pinned);

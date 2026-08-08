@@ -370,6 +370,7 @@ export interface ProjectNode {
   sessionPath?: string;
   projectColor?: string;
   turns?: number;
+  preview?: string;
   createdAt?: number;
   lastActivityAt?: number;
   open?: boolean;
