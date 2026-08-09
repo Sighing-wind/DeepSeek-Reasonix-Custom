@@ -1,96 +1,77 @@
-<p align="center">
+﻿<p align="center">
   <img src="docs/logo.svg" alt="Reasonix" width="640"/>
 </p>
 
-> ⚠️ **非官方定制版** —— 基于 [esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)（`main-v2` 分支，MIT 协议）的二次开发，与官方项目无关。若你只想用稳定官方版，请前往官方仓库。
-
+> 鈿狅笍 **闈炲畼鏂瑰畾鍒剁増** 鈥斺€?鍩轰簬 [esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)锛坄main-v2` 鍒嗘敮锛孧IT 鍗忚锛夌殑浜屾寮€鍙戯紝涓庡畼鏂归」鐩棤鍏炽€傝嫢浣犲彧鎯崇敤绋冲畾瀹樻柟鐗堬紝璇峰墠寰€瀹樻柟浠撳簱銆?
 <p align="center">
-  <strong>简体中文</strong>
+  <strong>绠€浣撲腑鏂?/strong>
 </p>
 
 ---
 
-# Reasonix 定制版（DeepSeek-Reasonix-Custom）
+# Reasonix 瀹氬埗鐗堬紙DeepSeek-Reasonix-Custom锛?
+涓€涓负瀵硅瘽绠＄悊鍋氫簡澶ч噺澧炲己鐨?Reasonix 妗岄潰瀹㈡埛绔€傛牳蹇冩€濊矾锛?*瀵硅瘽搴旇鍙互琚暣鐞?* 鈥斺€?鎺掑簭銆佸悎骞躲€佺Щ鍔ㄣ€佷竴閿矇娴革紝鑰屼笉鏄爢鍦ㄤ竴涓垪琛ㄩ噷鍚冪伆銆?
+## 鍔熻兘浜偣
 
-一个为对话管理做了大量增强的 Reasonix 桌面客户端。核心思路：**对话应该可以被整理** —— 排序、合并、移动、一键沉浸，而不是堆在一个列表里吃灰。
-
-## 功能亮点
-
-| 功能 | 说明 |
+| 鍔熻兘 | 璇存槑 |
 | --- | --- |
-| 🗂️ **对话拖拽排序** | 侧边栏对话可上下拖动调整顺序，顺序本地保存 |
-| 🔗 **合并对话** | 两个对话合成一个。支持**右键菜单**选择目标，或**拖拽悬停**自动归位、高亮两个对话、**双击**确认主对话（5 秒可选期，其他拖动可打断）。跨工作区禁止合并。合并后可 `Ctrl+Z` 撤销 |
-| 📦 **跨项目移动** | 把对话移到另一个工作区，自动关闭原标签、注入系统通知提示，失败自动回滚 |
-| 🤖 **AI 标题** | 最后一轮消息旁点「AI 标题」，AI 总结最近几轮对话生成新标题，预览确认后应用，可撤回 |
-| ⏪ **统一撤销** | 合并 / AI 标题共用一条撤销历史，`Ctrl+Z` 连续撤销（输入框内不受影响） |
-| 🧘 **纯净模式** | 标题栏「⛶」一键进入沉浸聊天：所有栏（顶栏/侧边栏/右侧面板/状态栏/工具栏）全部消失、聊天区铺满，只留消息流和输入框，`Esc` 退出并恢复原布局 |
-| 🐋 **定制图标** | DeepSeek 鲸鱼图标，方便与官方版区分 |
+| 馃梻锔?**瀵硅瘽鎷栨嫿鎺掑簭** | 渚ц竟鏍忓璇濆彲涓婁笅鎷栧姩璋冩暣椤哄簭锛岄『搴忔湰鍦颁繚瀛?|
+| 馃敆 **鍚堝苟瀵硅瘽** | 涓や釜瀵硅瘽鍚堟垚涓€涓€傛敮鎸?*鍙抽敭鑿滃崟**閫夋嫨鐩爣锛屾垨**鎷栨嫿鎮仠**鑷姩褰掍綅銆侀珮浜袱涓璇濄€?*鍙屽嚮**纭涓诲璇濓紙5 绉掑彲閫夋湡锛屽叾浠栨嫋鍔ㄥ彲鎵撴柇锛夈€傝法宸ヤ綔鍖虹姝㈠悎骞躲€傚悎骞跺悗鍙?`Ctrl+Z` 鎾ら攢 |
+| 馃摝 **璺ㄩ」鐩Щ鍔?* | 鎶婂璇濈Щ鍒板彟涓€涓伐浣滃尯锛岃嚜鍔ㄥ叧闂師鏍囩銆佹敞鍏ョ郴缁熼€氱煡鎻愮ず锛屽け璐ヨ嚜鍔ㄥ洖婊?|
+| 馃 **AI 鏍囬** | 鏈€鍚庝竴杞秷鎭梺鐐广€孉I 鏍囬銆嶏紝AI 鎬荤粨鏈€杩戝嚑杞璇濈敓鎴愭柊鏍囬锛岄瑙堢‘璁ゅ悗搴旂敤锛屽彲鎾ゅ洖 |
+| 鈴?**缁熶竴鎾ら攢** | 鍚堝苟 / AI 鏍囬鍏辩敤涓€鏉℃挙閿€鍘嗗彶锛宍Ctrl+Z` 杩炵画鎾ら攢锛堣緭鍏ユ鍐呬笉鍙楀奖鍝嶏級 |
+| 馃 **绾噣妯″紡** | 鏍囬鏍忋€屸浂銆嶄竴閿繘鍏ユ矇娴歌亰澶╋細鎵€鏈夋爮锛堥《鏍?渚ц竟鏍?鍙充晶闈㈡澘/鐘舵€佹爮/宸ュ叿鏍忥級鍏ㄩ儴娑堝け銆佽亰澶╁尯閾烘弧锛屽彧鐣欐秷鎭祦鍜岃緭鍏ユ锛宍Esc` 閫€鍑哄苟鎭㈠鍘熷竷灞€ |
+| 馃悑 **瀹氬埗鍥炬爣** | DeepSeek 椴搁奔鍥炬爣锛屾柟渚夸笌瀹樻柟鐗堝尯鍒?|
 
-## 安装（Windows）
-
-### 方式一：直接下载（推荐）
-
-1. 到 [Releases](../../releases) 下载最新的 `reasonix-desktop-custom.exe`；
-2. **首次运行前**设置数据目录隔离（避免和官方版数据混在一起），新建 `ReasonixCustom.cmd` 内容如下：
-
+## 瀹夎锛圵indows锛?
+### 鏂瑰紡涓€锛氱洿鎺ヤ笅杞斤紙鎺ㄨ崘锛?
+1. 鍒?[Releases](../../releases) 涓嬭浇鏈€鏂扮殑 `reasonix-desktop-custom.exe`锛?2. **棣栨杩愯鍓?*璁剧疆鏁版嵁鐩綍闅旂锛堥伩鍏嶅拰瀹樻柟鐗堟暟鎹贩鍦ㄤ竴璧凤級锛屾柊寤?`ReasonixCustom.cmd` 鍐呭濡備笅锛?
    ```cmd
    @echo off
    set REASONIX_HOME=%APPDATA%\reasonix-custom
    start "" "%~dp0reasonix-desktop-custom.exe"
    ```
 
-3. 双击运行。**API key 单独配置**（见下）。
+3. 鍙屽嚮杩愯銆?*API key 鍗曠嫭閰嶇疆**锛堣涓嬶級銆?
+### 鏂瑰紡浜岋細婧愮爜缂栬瘧
 
-### 方式二：源码编译
-
-需要 Go 1.21+、Node 20+、pnpm、wails v2。
-
+闇€瑕?Go 1.21+銆丯ode 20+銆乸npm銆亀ails v2銆?
 ```bash
 git clone https://github.com/Sighing-wind/DeepSeek-Reasonix-Custom.git
 cd DeepSeek-Reasonix-Custom/desktop
 wails build
-# 产物: build/bin/reasonix-desktop.exe
+# 浜х墿: build/bin/reasonix-desktop.exe
 ```
 
-## 试用 key（可选）
+## 璇曠敤 key锛堝彲閫夛級
 
-作者可能通过朋友圈/私聊提供**共享试用 key**。使用方式：
+浣滆€呭彲鑳介€氳繃鏈嬪弸鍦?绉佽亰鎻愪緵**鍏变韩璇曠敤 key**銆備娇鐢ㄦ柟寮忥細
 
-1. 在 [Releases](../../releases) 下载 **「模板 zip」**（不含 key，安全）并解压；
-2. 双击 **「启动定制版.cmd」**，按提示**粘贴 key 后回车**（无需编辑文件）；
-3. 启动器自动写入配置并启动，之后正常使用。
+1. 鍦?[Releases](../../releases) 涓嬭浇 **銆屾ā鏉?zip銆?*锛堜笉鍚?key锛屽畨鍏級骞惰В鍘嬶紱
+2. 鍙屽嚮 **銆屽惎鍔ㄥ畾鍒剁増.cmd銆?*锛屾寜鎻愮ず**绮樿创 key 鍚庡洖杞?*锛堟棤闇€缂栬緫鏂囦欢锛夛紱
+3. 鍚姩鍣ㄨ嚜鍔ㄥ啓鍏ラ厤缃苟鍚姩锛屼箣鍚庢甯镐娇鐢ㄣ€?
+璇曠敤 key 涓哄叡浜搴︺€佹暟閲忔湁闄愩€佺敤灏藉嵆鍋滐紱**姝ｅ紡浣跨敤璇疯嚜琛屾敞鍐?*锛堣涓嬶級銆?
+## 棣栨浣跨敤锛氶厤缃?API key
 
-试用 key 为共享额度、数量有限、用尽即停；**正式使用请自行注册**（见下）。
+Reasonix 鏄鎴风锛孉I 鑳藉姏鏉ヨ嚜**浣犺嚜宸辨敞鍐屾ā鍨嬪钩鍙?*鎷垮埌鐨?API key锛堜笉闇€瑕?Reasonix 璐﹀彿锛夛細
 
-## 首次使用：配置 API key
-
-Reasonix 是客户端，AI 能力来自**你自己注册模型平台**拿到的 API key（不需要 Reasonix 账号）：
-
-| 平台 | 用途 | 获取方式 |
+| 骞冲彴 | 鐢ㄩ€?| 鑾峰彇鏂瑰紡 |
 | --- | --- | --- |
-| DeepSeek 开放平台 | 主力对话模型 | platform.deepseek.com 注册 → 充值 → 创建 API key |
-| Moonshot（Kimi） | 视觉/备选模型 | platform.moonshot.cn 注册 → 创建 API key |
-| 智谱 AI | 备选模型 | open.bigmodel.cn 注册 → 创建 API key |
+| DeepSeek 寮€鏀惧钩鍙?| 涓诲姏瀵硅瘽妯″瀷 | platform.deepseek.com 娉ㄥ唽 鈫?鍏呭€?鈫?鍒涘缓 API key |
+| Moonshot锛圞imi锛?| 瑙嗚/澶囬€夋ā鍨?| platform.moonshot.cn 娉ㄥ唽 鈫?鍒涘缓 API key |
+| 鏅鸿氨 AI | 澶囬€夋ā鍨?| open.bigmodel.cn 娉ㄥ唽 鈫?鍒涘缓 API key |
 
-把 key 填进 `%APPDATA%\reasonix\\.env`（`DEEPSEEK_API_KEY=sk-...` 格式），或在应用内设置页配置。
+鎶?key 濉繘 `%APPDATA%\reasonix\\.env`锛坄DEEPSEEK_API_KEY=sk-...` 鏍煎紡锛夛紝鎴栧湪搴旂敤鍐呰缃〉閰嶇疆銆?
+## 涓庡畼鏂圭増鍏卞瓨 / 鏁版嵁闅旂
 
-## 与官方版共存 / 数据隔离
+- 瀹氬埗鐗堜娇鐢ㄧ嫭绔嬬殑 `REASONIX_HOME`锛堝 `%APPDATA%\reasonix-custom`锛夛紝**涓嶈鍐欏畼鏂圭増鏁版嵁**锛屼袱鑰呭彲鍚屾椂瀹夎浜掍笉骞叉壈锛?- 鍗歌浇锛氬垹闄?exe 涓?`%APPDATA%\reasonix-custom` 鐩綍鍗冲彲锛屾棤娈嬬暀鏈嶅姟銆?
+## 宸茬煡闂涓庨闄?
+1. **钃濆睆椋庨櫓锛堥噸瑕侊級**锛氫釜鍒満鍣ㄨ嫢瑁呮湁**铏氭嫙鏄剧ず椹卞姩**锛堝鍚戞棩钁?OrayIddDriver銆丄skLink 绛夎繙绋?涓叉祦杞欢锛夛紝鍚姩鏈▼搴忓彲鑳借Е鍙戣摑灞?`0xBE`锛圓TTEMPTED_WRITE_TO_READONLY_MEMORY锛夈€傞亣鍒拌鍏堢鐢?鍗歌浇鐩稿叧铏氭嫙鏄剧ず椹卞姩鍐嶄娇鐢紙璁惧绠＄悊鍣?鈫?鏄剧ず閫傞厤鍣?鈫?绂佺敤锛夈€備笌 Reasonix 鏈綋鏃犵洿鎺ュ叧绯伙紝浣嗚鐭ユ倝锛?2. **鍚堝苟/绉诲姩鏄暟鎹搷浣?*锛氳櫧鐒舵敮鎸?`Ctrl+Z` 鎾ら攢锛屼粛寤鸿鎿嶄綔鍓嶅湪璁剧疆閲屽浠芥暟鎹洰褰曪紱
+3. Windows 瀵?*鏈鍚?exe** 鍙兘寮瑰嚭 SmartScreen 鎻愮ず锛岄€夋嫨銆屼粛瑕佽繍琛屻€嶅嵆鍙紱
+4. 鍩轰簬 `main-v2` 鍒嗘敮寮€鍙戯紝瀹樻柟鍚庣画鏇存柊闇€瑕佹墜鍔ㄥ悓姝ワ紝鍔熻兘鍙兘钀藉悗浜庡畼鏂规渶鏂扮増锛?5. 浠呴獙璇佽繃 Windows锛沵acOS/Linux 鏈祴璇曘€?
+## 鍏嶈矗澹版槑
 
-- 定制版使用独立的 `REASONIX_HOME`（如 `%APPDATA%\reasonix-custom`），**不读写官方版数据**，两者可同时安装互不干扰；
-- 卸载：删除 exe 与 `%APPDATA%\reasonix-custom` 目录即可，无残留服务。
-
-## 已知问题与风险
-
-1. **蓝屏风险（重要）**：个别机器若装有**虚拟显示驱动**（如向日葵 OrayIddDriver、AskLink 等远程/串流软件），启动本程序可能触发蓝屏 `0xBE`（ATTEMPTED_WRITE_TO_READONLY_MEMORY）。遇到请先禁用/卸载相关虚拟显示驱动再使用（设备管理器 → 显示适配器 → 禁用）。与 Reasonix 本体无直接关系，但请知悉；
-2. **合并/移动是数据操作**：虽然支持 `Ctrl+Z` 撤销，仍建议操作前在设置里备份数据目录；
-3. Windows 对**未签名 exe** 可能弹出 SmartScreen 提示，选择「仍要运行」即可；
-4. 基于 `main-v2` 分支开发，官方后续更新需要手动同步，功能可能落后于官方最新版；
-5. 仅验证过 Windows；macOS/Linux 未测试。
-
-## 免责声明
-
-本项目为第三方个人修改版，**与 Reasonix 官方、DeepSeek 官方均无关联**。按 MIT 协议提供，不提供任何担保；使用过程中产生的数据丢失、系统异常等风险由使用者自行承担。官方文档与支持请前往 [esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)。
-
+鏈」鐩负绗笁鏂逛釜浜轰慨鏀圭増锛?*涓?Reasonix 瀹樻柟銆丏eepSeek 瀹樻柟鍧囨棤鍏宠仈**銆傛寜 MIT 鍗忚鎻愪緵锛屼笉鎻愪緵浠讳綍鎷呬繚锛涗娇鐢ㄨ繃绋嬩腑浜х敓鐨勬暟鎹涪澶便€佺郴缁熷紓甯哥瓑椋庨櫓鐢变娇鐢ㄨ€呰嚜琛屾壙鎷呫€傚畼鏂规枃妗ｄ笌鏀寔璇峰墠寰€ [esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)銆?
 ## License
 
-MIT —— 继承自上游 [esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)。定制部分同样以 MIT 发布。
+MIT 鈥斺€?缁ф壙鑷笂娓?[esengine/DeepSeek-Reasonix](https://github.com/esengine/DeepSeek-Reasonix)銆傚畾鍒堕儴鍒嗗悓鏍蜂互 MIT 鍙戝竷銆?
