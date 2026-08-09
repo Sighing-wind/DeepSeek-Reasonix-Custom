@@ -119,7 +119,7 @@ func (a *App) MergeTopics(sourceTopicID, targetTopicID string) error {
 		return fmt.Errorf("read target session: %w", err)
 	}
 	merged := append(append([]provider.Message(nil), tgt.Snapshot()...), srcMsgs...)
-	tgt.Rewrite(merged)
+	tgt.Rewrite(merged, "merge")
 	if err := tgt.Save(tgtPath); err != nil {
 		return fmt.Errorf("save merged session: %w", err)
 	}
